@@ -1,0 +1,102 @@
+Summary and Statistics
+========================================================
+
+This page gives an overview, of the cohorts, methods and data types used by TCGA-WebTools.
+For each data type, you'll find a summary below.
+In general, for each data type different plot types are available. Each result can be downloaded as CSV (Comma Separated Values) file, for further analysis using TCGA data. To overcome resolution issues, each plot can be downloaded as vector graphic in PDF (Portable Document Format) format.
+
+## Variant Section
+### Data 
+For variant analysis TCGAs Level 2 is used. It is directly downloaded, as everything else, from Broads [firehose pipeline] (http://gdac.broadinstitute.org/runs/stddata__latest/). Since only somatic variants are available, no pre processing is required. The variants are directly used for analysis.
+### Cohort Info
+Overall there are `r length(unique(variant.Table$Tumor_Sample_Barcode))` patients within `r length(getCancerTypes(unique(variant.Table$Tumor_Sample_Barcode)))` entities. The cohorts include the following tumor entities with given the number of patient samples
+```{r echo=F}
+table(getTSS(unique(variant.Table$Tumor_Sample_Barcode)))
+```
+### Methods and Plots
+For the variant section, the Heatmap tab gives an overview, of how many patients harbor a mutation in the given genes. Here one can exclude silent mutations and uncheck multiple mutations per gene. The latter option will reduce the amount of e.g. three mutations per gene to one, which affects the statistics. Further more, a threshold can be applied. This will remove genes from your provided list, which harbor mutations in less than the given percentage of patients.
+
+## Methylation Section
+### Data
+Here level 3 TCGA data from Illuminas HumanMethylation450 BeadChip, normalized beta values, are used for analysis
+### Cohort Info
+Overall there are `r sum(sapply(methylation.List,function(x) length(unique(x$patient))))` patients in all methylation cohorts. Since methylation analysis can performed in both, paired and unpaired mode, the following table gives an overview of the patients and tissue distribution within the entities.
+```{r echo=FALSE}
+pats = unlist(sapply(methylation.List,function(x)unique(x$patient)))
+to.Echo = cbind(Entity = getTSS(pats),
+                Patient = pats,
+                Tumor = is.Tumor(pats),
+                Normal = is.Normal(pats))
+to.Echo = lapply(setdiff(unique(to.Echo[, "Entity"]), "Index"), function(x){
+  entity.Tab = to.Echo[to.Echo[,"Entity"] == x, ]
+  normal.Count = length(which(entity.Tab[, "Normal"]==T))
+  tumor.Count = length(which(entity.Tab[, "Tumor"]==T))
+  pairs.Count = length(get.Pairs(entity.Tab[, "Patient"]))
+  c(tumor.Count, normal.Count, pairs.Count,
+    sum(tumor.Count, normal.Count, pairs.Count))
+  })
+to.Echo = do.call(rbind, to.Echo)
+colnames(to.Echo) = c("Tumor", "Normal", "Pair", "All")
+rownames(to.Echo) = getCancerTypes(pats)
+to.Echo
+```
+### Methods and Plots
+In paired mode, only paired samples get analysed, which reduces the amount of patients quiet drastically.
+Owed by the fact, that an additional dimension must be considered when analyzing methylation data (each gene has multiple beta values for each region, like Body, 1st Exon, etc.), only one entity at a time can be analysed. This has computational complexity issues.
+For analysis of differential methylation, the user can choose between the raw difference and a test statistic. For the difference, the methylation value of the tumor gene gets subtracted be the genes normal value, or mean of genes methylation values, if unpaired. If the test statistic is used, a signed/unsigned wilcoxon test is applied, depending on paired/unpaired mode. Afterwards, a Benjamini/Hochberg P-Value correction is applied, to correct multiple testing batch effects. Thresholds, for difference, can be changed in the options tab. When using the wicloxon test, a P-Value of 0.05 is used as threshold.
+Four plot types are available to analyse the data. The global plot shows the amount of genes, which are (depending on the given options) considered as deferentially methylated. While the distribution just shows the overview, within the genes and regions. The last plot, the waterfall, shows patients having deferentially methylated genes/regions exceeding the given threshold.
+Depending on the users interest, the gene can be split into its regions, which will result in a profile of differential methylation within the genes themselves. 
+
+## mRNA Expression Section
+### Data
+For mRNA expression level 3 RNA-SeqV2 data is used. Here log2+1 normalized RSEM values are considered for analysis.
+### Cohort Infos
+Overall `r length(which(is.Tumor(colnames(expression.Table))==T))` patients are included, for this analysis. The distribution of patients and samples is shown below.
+```{r echo=FALSE}
+to.Echo = cbind(Entity = getTSS(colnames(expression.Table)),
+                Patient = colnames(expression.Table),
+                Tumor = is.Tumor(colnames(expression.Table)),
+                Normal = is.Normal(colnames(expression.Table)))
+to.Echo = lapply(setdiff(unique(to.Echo[, "Entity"]), "Index"), function(x){
+  entity.Tab = to.Echo[to.Echo[,"Entity"] == x, ]
+  normal.Count = length(which(entity.Tab[, "Normal"]==T))
+  tumor.Count = length(which(entity.Tab[, "Tumor"]==T))
+  pairs.Count = length(get.Pairs(entity.Tab[, "Patient"]))
+  return(c(tumor.Count, normal.Count, pairs.Count,
+    sum(tumor.Count, normal.Count, pairs.Count)))
+  })
+to.Echo = do.call(rbind, to.Echo)
+colnames(to.Echo) = c("Tumor", "Normal", "Pair", "All")
+rownames(to.Echo) = getCancerTypes(colnames(expression.Table))
+to.Echo
+```
+### Methods and Plots
+Just as for methylation analysis, two different methods can be used for mRNA expression analysis. The fold change on the one hand, the Z-Score on the other. The fold change is the expression the gene for one patient, divided by the genes mean expression of the control group. The Z-Score additionally divides by the control groups standard deviation. For both, a threshold can be given. Here, the control group, is mean assembled by all remaining tumor samples of the entity in question.
+Also here an overall plot is available, which gives percentages or hard numbers for the differential expression overview. Waterfall and box plots are provided, to analyse significant over/underexpressed patients by entity or gene. For waterfall plots, the threshold is used.
+
+## Copynumber Section
+### Data
+For CNV analysis, level 4 data from firehose analyses pipeline (not stddata) has been used. This datatype is additionally processed using GISTIC2.0. Here only the thresholded data type is used. This data type gives, for each patient/gene combination, a value of -2, -1, 0, 1, or 2, indication of the genes a high or low gain/loss is present, or if not, no change is present (0).
+### Cohort Info
+Overall `r length(which(is.Tumor(colnames(copynumber.Table))==T))` patients are included, for this analysis. The distribution of patients and samples is shown below.
+```{r echo=FALSE}
+to.Echo = cbind(Entity = getTSS(colnames(copynumber.Table)),
+                Patient = colnames(copynumber.Table),
+                Tumor = is.Tumor(colnames(copynumber.Table)),
+                Normal = is.Normal(colnames(copynumber.Table)))
+to.Echo = lapply(setdiff(unique(to.Echo[, "Entity"]), "Index"), function(x){
+  entity.Tab = to.Echo[to.Echo[,"Entity"] == x, ]
+  normal.Count = length(which(entity.Tab[, "Normal"]==T))
+  tumor.Count = length(which(entity.Tab[, "Tumor"]==T))
+  pairs.Count = length(get.Pairs(entity.Tab[, "Patient"]))
+  return(c(tumor.Count, normal.Count, pairs.Count,
+    sum(tumor.Count, normal.Count, pairs.Count)))
+  })
+to.Echo = do.call(rbind, to.Echo)
+colnames(to.Echo) = c("Tumor", "Normal", "Pair", "All")
+rownames(to.Echo) = getCancerTypes(colnames(copynumber.Table))
+to.Echo
+```
+### Methods and Plots
+Just a for the variant analyses, no statistic is required. Here the user can choose, if he wants to analyse gene with high gain/loss, low gain/loss or both of them.
+The results are shown in an global plot, which can provide percentages or real patient numbers, just as everywhere else. In the bar plot, the user gets the distribution and proportion of different CNV statuses, for each entity. Which allows one to create a profile for copynumber changes by genes.
